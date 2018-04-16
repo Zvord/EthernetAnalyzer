@@ -11,34 +11,57 @@ using System.Collections;
 
 namespace EthernetAnalyzer
 {
-    public partial class Form1 : Form
+    public partial class FormMain : Form
     {
-        public Form1()
+
+        const string labelPrefix = "Флагов от предыдущего пакета: ";
+
+        public FormMain()
         {
             InitializeComponent();
-            Packets = new List<List<byte>>();
+            Packets = new List<Packet>();
         }
 
-        private List<List<byte>> Packets;
+        private List<Packet> Packets;
 
         private void ButtonOpen_Click(object sender, EventArgs e)
         {
+            var defaultColor = ButtonOpen.BackColor;
             ButtonOpen.BackColor = Color.Red;
+
             var dialogResult = OpenFileDialog.ShowDialog();
             if (dialogResult != DialogResult.OK)
+            {
+                ButtonOpen.BackColor = defaultColor;
                 return;
+            }
+
             string fileName = OpenFileDialog.FileName;
+
             byte[] bytes = System.IO.File.ReadAllBytes(fileName);
             if (CheckBoxReverseBefore.Checked)
                 bytes = ReverseAllBits(bytes);
             BitArray bits = new BitArray(bytes);
             Packets = Analyzer.AnalyzeBitStream(bits, CheckBoxReverseFinal.Checked);
-            TextBox.Text = PrintPacket(Packets[0]);
+            if (Packets.Count == 0)
+            {
+                MessageBox.Show("No packets found");
+                ButtonOpen.BackColor = defaultColor;
+                return;
+            }
             PacketSelecter.Text = "1";
+            if (PacketSelecter.Items.Count > 1) // Due to some strange behaivour Items.Clear() does not return internal counter to 0
+            {
+                var item = PacketSelecter.Items[0];
+                PacketSelecter.SelectedItem = item;
+            }
             PacketSelecter.Items.Clear();
             for (int i = 1; i <= Packets.Count; i++)
                 PacketSelecter.Items.Add(i.ToString());
             ButtonOpen.BackColor = Color.Green;
+            TextBox.Text = Packets[0].ToString();
+            LabelDistance.Text = labelPrefix + Packets[0].FlagsBefore.ToString();
+
         }
 
         private byte ReverseBits(byte v)
@@ -67,23 +90,6 @@ namespace EthernetAnalyzer
             return ret;
         }
 
-        static private string PrintPacket(List<byte> bytes)
-        {
-            StringBuilder hex = new StringBuilder(bytes.Count * 2);
-            int count = 0;
-            foreach (byte b in bytes)
-            {
-                if (count == 8)
-                {
-                    count = 0;
-                    hex.Append("\n");
-                }
-                hex.AppendFormat("{0:X2}", b);
-                count++;
-            }
-            return hex.ToString();
-        }
-
         private void PacketSelecter_SelectedItemChanged(object sender, EventArgs e)
         {
             if (PacketSelecter.Text == string.Empty)
@@ -99,7 +105,8 @@ namespace EthernetAnalyzer
                     PacketSelecter.Text = value.ToString();
                 }
             }
-            TextBox.Text = PrintPacket(Packets[value-1]);
+            TextBox.Text = Packets[value-1].ToString();
+            LabelDistance.Text = labelPrefix + Packets[value - 1].FlagsBefore.ToString();
         }
 
         private void ReverseFinalTrue_CheckedChanged(object sender, EventArgs e)

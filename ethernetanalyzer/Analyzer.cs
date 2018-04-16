@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Collections;
+using System.Diagnostics;
 
 namespace EthernetAnalyzer
 {
@@ -12,20 +13,26 @@ namespace EthernetAnalyzer
         static private bool[] Flag = { false, true, true, true, true, true, true, false };
         static private bool[] Terminator = { true, true, true, true, true, true };
 
-        static public List<List<byte>> AnalyzeBitStream(BitArray bits, bool revert)
+        static public List<Packet> AnalyzeBitStream(BitArray bits, bool revert)
         {
-            List<List<byte>> packets = new List<List<byte>>();
+            List<Packet> packets = new List<Packet>();
             int curPos = 0;
+            int distance = 0;
             while (true)
             {
                 int flagStartInd = FindFlag(bits, curPos);
                 bool[] test = ExtractBits(bits, flagStartInd, 8);
-                bool[] test2 = ExtractBits(bits, flagStartInd+8, 8);
+                bool[] test2 = ExtractBits(bits, flagStartInd + 8, 8);
                 if (flagStartInd < 0)
                     break;
                 int packetStart = FindPacketStart(bits, flagStartInd+8);
                 if (packetStart < 0)
                     break;
+
+                distance = packetStart - flagStartInd;
+                Debug.Assert(distance % 8 == 0);
+                distance /= 8;
+
                 int packetEnd = FindPacketEnd(bits, packetStart);
                 if (packetEnd < 0)
                     break;
@@ -33,7 +40,8 @@ namespace EthernetAnalyzer
                 if (packetInfo.Item2 < 0)
                 {
                     var cur = packetInfo.Item1;
-                    packets.Add(ReverseBits(cur, revert));
+                    Packet newPacket = new Packet(ReverseBits(cur, revert), distance);
+                    packets.Add(newPacket);
                 }
                     
                 curPos = packetEnd+1;
@@ -42,6 +50,12 @@ namespace EthernetAnalyzer
             return packets;
         }
 
+        /// <summary>
+        /// Searhes for 0x7E flag. Returns starting index in the case of success and -1 in the case of failure.
+        /// </summary>
+        /// <param name="bits"></param>
+        /// <param name="startInd"></param>
+        /// <returns></returns>
         static private int FindFlag(BitArray bits, int startInd)
         {
             for (int i = startInd; i <= bits.Length-8; i++)
